@@ -8,5 +8,5 @@ def home(request):
 urlpatterns = [
     path('', home),
     path('admin/', admin.site.urls),
-    path('grades/', include('grades.urls')),
+    path('grades/', include('grades.urls', namespace='grades')),
 ]
