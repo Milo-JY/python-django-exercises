@@ -4,6 +4,7 @@ from rest_framework import status
 from django.urls import reverse
 from .models import Grade
 from .serializers import GradeSerializer
+from django.contrib.auth.models import User
 
 # 단위 테스트: 모델
 class GradeModelTest(TestCase):
@@ -22,11 +23,23 @@ class GradeModelTest(TestCase):
 class GradeAPITestCase(APITestCase):
     def setUp(self):
         self.client = APIClient()
+        self.user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.login(username='testuser', password='testpass')
+        self.token = self.client.post(reverse('token_obtain_pair'), {
+            'username': 'testuser',
+            'password': 'testpass'
+        }).data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
         self.url = reverse('grades:grade-list')
         self.stats_url = reverse('grades:grade-stats')
         self.valid_payload = {'student_name': 'Bob', 'score': 90}
         self.invalid_payload = {'student_name': '', 'score': -10}
         self.grade = Grade.objects.create(student_name='Charlie', score=88)
+
+    def test_get_grade_list_unauthenticated(self):
+        self.client.credentials()  # 토큰 제거
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_get_grade_list(self):
         response = self.client.get(self.url)
@@ -72,12 +85,12 @@ class GradeAPITestCase(APITestCase):
         self.assertIn('mean', response.data)
         self.assertIn('median', response.data)
         self.assertIn('mode', response.data)
-        self.assertEqual(response.data['mean'], 89.0)  # (88+90)/2
-        self.assertEqual(response.data['median'], 89.0)  # [88, 90] -> (88+90)/2
-        self.assertEqual(response.data['mode'], 88)  # 첫 번째 값 반환
+        self.assertEqual(response.data['mean'], 89.0)
+        self.assertEqual(response.data['median'], 89.0)
+        self.assertEqual(response.data['mode'], 88)
 
     def test_get_grade_stats_empty(self):
-        Grade.objects.all().delete()  # 모든 데이터 삭제
+        Grade.objects.all().delete()
         response = self.client.get(self.stats_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('error', response.data)
